@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario{
+  id Int @id @default(autoincrement())
+  email String @unique
+  senha String
+  perfil Perfil?
+  // indica que o usuario tem um PERFIL
+}
+
+model Perfil{
+  id Int @id @default(autoincrement())
+  bio String?
+  fotoUrl String?
+  usuarioId Int @unique
+
+  //garante a relacao 1:1
+  //configura a amarracao entre os campos fisicos das tableas
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+}
