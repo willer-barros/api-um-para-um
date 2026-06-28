@@ -1,119 +1,134 @@
 import express from "express";
 import cors from "cors"
 import { prisma } from "./lib/prisma.ts";
+import morgan from "morgan"
 
 
 const app = express()
 const PORT = 3000
 app.use(express.json())
 app.use(cors())
+app.use(morgan("dev"))
 
-app.get("/usuarios", async(req, res) =>{
-    try{
-        const usuarios = await prisma.usuario.findMany()
-        res.json(usuarios)
+app.use((req, res, next) =>{
+    console.log(`\n------------------------------`);
+    next()
+});
 
-    } catch(error){
-        res.status(500).json({error: "Erro ao buscar usuarios"})
-    }
-})
-
-app.post("/usuaios", async(req, res) =>{
-
-    try{
-    const {email, senha, bio, fotoUrl} = req.body
-    const novoUsuario = await usuario.create({
-        data:{
-            email,
-            senha,
-            perfil:{
-                create:{
-                    bio,
-                    fotoUrl
-                }
-            }
-        },
-        include: {perfil: true}
-    })
-    res.status(201).json(novoUsuario)
-    } catch(error){
-        res.status(400).json({ erro: "Erro ao criar usuario", detalhe: error.message})
+app.get("/usuarios", async (req, res) => {
+    console.log(`🔍 [API] Buscando todos os usuários no banco de dados...`);
+    try {
+        const usuarios = await prisma.usuario.findMany();
+        console.log(`✅ [API] Busca realizada com sucesso. Total: ${usuarios.length} usuários.`);
+        res.json(usuarios);
+    } catch (error) {
+        console.error(`❌ [API Erro] Falha ao buscar usuários:`, error.message);
+        res.status(500).json({ error: "Erro ao buscar usuarios" });
     }
 });
 
-//esse atualiza tudo
-app.put("/usuarios/:id", async(req, res) =>{
-    try{
-        const {id} = req.params
-        const {email, senha, bio, fotoUrl} = req.body
-
-        const usuarioAtualizado = await prisma.usuario.update({
-            where: {id: Number(id)},
+app.post("/usuarios", async (req, res) => {
+    console.log(`📥 [API] Recebendo dados para criar um novo usuário...`);
+    try {
+        const { email, senha, bio, fotoUrl } = req.body;
+        
+        const novoUsuario = await prisma.usuario.create({
             data: {
                 email,
                 senha,
-                perfil:{
-                    upsert:{
-                        create: {bio, fotoUrl},
-                        update: {bio, fotoUrl}
+                perfil: {
+                    create: { bio, fotoUrl }
+                }
+            },
+            include: { perfil: true }
+        });
+        
+        console.log(`✅ [API] Usuário criado com sucesso! ID: ${novoUsuario.id}`);
+        res.status(201).json(novoUsuario); 
+    } catch (error) {
+        console.error("❌ [API Erro] Erro completo do Prisma:", error.message || error);
+        res.status(400).json({ 
+            erro: "Erro ao criar usuario", 
+            detalhe: error.message || error
+        });
+    }
+});
+
+app.put("/usuarios/:id", async (req, res) => {
+    const { id } = req.params;
+    console.log(`🔄 [API] Substituição total (PUT) solicitada para o ID: ${id}`);
+    try {
+        const { email, senha, bio, fotoUrl } = req.body;
+
+        const usuarioAtualizado = await prisma.usuario.update({
+            where: { id: Number(id) },
+            data: {
+                email,
+                senha,
+                perfil: {
+                    upsert: {
+                        create: { bio, fotoUrl },
+                        update: { bio, fotoUrl }
                     }
                 }
             },
-            include: {perfil: true}
-        })
+            include: { perfil: true }
+        });
 
-        res.json(usuarioAtualizado)
-    } catch(error){
-        res.status(400).json({erro: "Erro ao atualizar ususario", detalhe: error.message})
+        console.log(`✅ [API] Usuário ${id} totalmente atualizado via Upsert.`);
+        res.json(usuarioAtualizado);
+    } catch (error) {
+        console.error(`❌ [API Erro] Falha no PUT do usuário ${id}:`, error.message);
+        res.status(400).json({ erro: "Erro ao atualizar ususario", detalhe: error.message });
     }
 });
 
-//atauliza parcialmente
-app.patch("/usuarios/:id", async(req, res) =>{
-    try{
-        const {id} = req.params;
-        const {email, senha, bio, fotoUrl} = req.body;
+app.patch("/usuarios/:id", async (req, res) => {
+    const { id } = req.params;
+    console.log(`🩹 [API] Modificação parcial (PATCH) solicitada para o ID: ${id}`);
+    try {
+        const { email, senha, bio, fotoUrl } = req.body;
 
-        const dadosAtualizacao ={
+        const dadosAtualizacao = {
             email,
             senha,
-            perfil: (bio || fotoUrl) ?{
-                update: {
-                    bio,
-                    fotoUrl
-                }
+            perfil: (bio || fotoUrl) ? {
+                update: { bio, fotoUrl }
             } : undefined
         };
 
-        Object.keys(dadosAtualizacao).forEach(key => dadosAtualizacao[key] === undefined && delete dadosAtualizacao[key])
+        Object.keys(dadosAtualizacao).forEach(key => dadosAtualizacao[key] === undefined && delete dadosAtualizacao[key]);
 
         const usuario = await prisma.usuario.update({
-            where: {id: Number(id)},
+            where: { id: Number(id) },
             data: dadosAtualizacao,
-            include: {perfil: true}
-        })
-
-        res.json(usuario)
-    } catch(error){
-        res.status(400).json({erro: "Erro ao atualizar parcialmente", detalhe: error.message})
-    }
-});
-
-app.delete("/usuarios/:id", async(req, res) =>{
-    try{
-        const {id} = req.params;
-
-        await prisma.usuario.delete({
-            where: {id: Number(id)}
+            include: { perfil: true }
         });
 
-        res.status(204).send()
-    } catch(error){
-        res.status(400).json({erro: "Erro ao deletar usuario", detalhe: error.message})
+        console.log(`✅ [API] Campos do usuário ${id} atualizados com sucesso.`);
+        res.json(usuario);
+    } catch (error) {
+        console.error(`❌ [API Erro] Falha no PATCH do usuário ${id}:`, error.message);
+        res.status(400).json({ erro: "Erro ao atualizar parcialmente", detalhe: error.message });
     }
 });
 
+app.delete("/usuarios/:id", async (req, res) => {
+    const { id } = req.params;
+    console.log(`🗑️ [API] Solicitação para deletar o usuário ID: ${id}`);
+    try {
+        await prisma.usuario.delete({
+            where: { id: Number(id) }
+        });
 
-app.listen(PORT, () =>{
-    console.log(`❌​1️⃣​8️⃣​ API para Maiores com rodamento em: http://localhost:${PORT}`)
-})
+        console.log(`✅ [API] Usuário ${id} removido do banco de dados.`);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`❌ [API Erro] Falha ao deletar o usuário ${id}:`, error.message);
+        res.status(400).json({ erro: "Erro ao deletar usuario", detalhe: error.message });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`❌​1️⃣​8️⃣​ API para Maiores rodando em: http://localhost:${PORT}`);
+});
