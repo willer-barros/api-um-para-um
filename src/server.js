@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors"
 import { prisma } from "./lib/prisma.ts";
 import morgan from "morgan"
+import argon2 from "argon2"
+import jwt from "jsonwebtoken"
+
+const SECRET_KEY = process.env.JWT_SECRET || "chave_chupa_cabra";
 
 
 const app = express()
@@ -14,6 +18,45 @@ app.use((req, res, next) =>{
     console.log(`\n------------------------------`);
     next()
 });
+// rota para registrar usuario usando ARGON2id
+app.post("/register", async (req, res) =>{
+    const {nome, email, senha} = req.body;
+    try{
+    if(!nome || !email || !senha){
+        return res.status(400).json({erro: "Todos os campos são obrigatorios"})
+
+    }
+
+    const emailExiste = await prisma.usuario.findUnique({where: {email}})
+    if(emailExiste){
+        return res.status(409).json({erro: "Este email ja esta cadastrado"})
+    }
+
+    //geracao do hash na senha com argon2Id
+
+    const senhaHash = await argon2.hash(senha, {
+        type: argon2.argon2id, //garante o algoritmo hibrido correto
+        memoryCost: 2 ** 16, //64MB de memoria para processar PADRAO
+        timeCost: 3, //3 iteracoes
+    })
+
+    const novoUsuario = await prisma.usuario.create({
+        data:{
+            nome,
+            email,
+            senha: senhaHash
+        },
+        select: {id: true, nome: true, email: true}
+    })
+
+    return res.status(201).json(novoUsuario)
+} catch(error){
+    return res.status(400).json({erro: "Erro ao registrar novo usuario"})
+}
+})
+
+//rota para login
+app.post("")
 
 app.get("/usuarios", async (req, res) => {
     console.log(`🔍 [API] Buscando todos os usuários no banco de dados...`);

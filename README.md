@@ -33,3 +33,14 @@ A API foi estruturada utilizando o modelo Cliente/Servidor, onde as requisiçõe
 No seu terminal, navegue até a pasta do projeto e execute:
 ```bash
 npm install
+
+```
+##Entendo a string do argon2Id
+
+$argon2id$: Define o algoritmo exato usado.
+
+$v=19$: Versão do Argon2.
+
+$m=65536,t=3,p=4$: Os parâmetros de dificuldade que você configurou (Memory: 64MB, Time: 3 iterações, Parallelism: 4 threads).
+
+O restante é o Salt e o Hash gerados.
