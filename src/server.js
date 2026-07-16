@@ -86,6 +86,30 @@ app.post("/login", async (req, res) =>{
     })
 })
 
+app.post("/api/refresh", verificarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuarioLogadoId;
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: usuarioId }
+    });
+
+    if (!usuario) {
+      return res.status(401).json({ erro: "Usuário não encontrado." });
+    }
+
+    const payload = { id: usuario.id, email: usuario.email };
+    const novoToken = jwt.sign(payload, SECRET_KEY, { expiresIn: '10m' });
+
+    console.log(`🔄 [API] Token renovado com sucesso para o ID: ${usuario.id}`);
+
+    return res.json({ token: novoToken });
+
+  } catch (error) {
+    return res.status(500).json({ erro: "Erro ao atualizar sessão." });
+  }
+});
+
 app.get("/usuarios", verificarToken, async (req, res) => {
     console.log(`🔍 [API] Buscando todos os usuários no banco de dados...`);
     try {
