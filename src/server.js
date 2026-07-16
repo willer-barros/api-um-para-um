@@ -4,6 +4,7 @@ import { prisma } from "./lib/prisma.ts";
 import morgan from "morgan"
 import argon2 from "argon2"
 import jwt from "jsonwebtoken"
+import { verificarToken } from "./middleware/authMiddleware.js";
 
 const SECRET_KEY = process.env.JWT_SECRET || "chave_chupa_cabra";
 
@@ -56,11 +57,40 @@ app.post("/register", async (req, res) =>{
 })
 
 //rota para login
-app.post("")
+app.post("/login", async (req, res) =>{
+    const {email, senha } = req.body;
 
-app.get("/usuarios", async (req, res) => {
+    if(!email || !senha){
+        return res.status(400).json({erro: "Email e senha sao obrigatorios"})
+    }
+
+    const usuario = await prisma.usuario.findUnique({where: {email}})
+    if (!usuario){
+        return res.status(401).json({ erro: "Email ou senha invalidos"})
+    }
+
+    //Verifica se a senha enviada confere com a que esta no DB
+
+    const senhaCorreta = await argon2.verify(usuario.senha, senha)
+
+    if(!senhaCorreta){
+        return res.status(401).json({error: "Email ou senha invalidos"})
+    }
+
+    const payload = {id: usuario.id, email: usuario.email};
+    const token = jwt.sign(payload, SECRET_KEY, {expiresIn: '10m'})
+
+    return res.json({
+        token, 
+        usuario: {id: usuario.id, nome: usuario.nome, email: usuario.email}
+    })
+})
+
+app.get("/usuarios", verificarToken, async (req, res) => {
     console.log(`🔍 [API] Buscando todos os usuários no banco de dados...`);
     try {
+
+        const usuarioLogado = req.usuarioLogadoId
         const usuarios = await prisma.usuario.findMany();
         console.log(`✅ [API] Busca realizada com sucesso. Total: ${usuarios.length} usuários.`);
         res.json(usuarios);
