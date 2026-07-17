@@ -7,6 +7,8 @@ import jwt from "jsonwebtoken"
 import { verificarToken } from "./middleware/authMiddleware.js";
 
 const SECRET_KEY = process.env.JWT_SECRET || "chave_chupa_cabra";
+const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET || "chave_chupa_cabra";
+const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || "chave_chupa_cabra";
 
 
 const app = express()
@@ -20,71 +22,82 @@ app.use((req, res, next) =>{
     next()
 });
 // rota para registrar usuario usando ARGON2id
-app.post("/register", async (req, res) =>{
-    const {nome, email, senha} = req.body;
-    try{
-    if(!nome || !email || !senha){
-        return res.status(400).json({erro: "Todos os campos são obrigatorios"})
+app.post('/api/refresh', async (req, res) => {
+  try {
+    const { tokenDeRenovacao } = req.body; // Vamos receber o refreshToken pelo corpo da requisição
 
+    if (!tokenDeRenovacao) {
+      return res.status(401).json({ erro: "Refresh Token não fornecido." });
     }
 
-    const emailExiste = await prisma.usuario.findUnique({where: {email}})
-    if(emailExiste){
-        return res.status(409).json({erro: "Este email ja esta cadastrado"})
+    // 1. Verifica se o Refresh Token é matematicamente válido
+    const dadosVerificados = jwt.verify(tokenDeRenovacao, REFRESH_SECRET);
+
+    // 2. Busca o usuário no banco para checar se esse token realmente pertence a ele
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: dadosVerificados.id }
+    });
+
+    // Se o token foi alterado ou se o usuário já deslogou e o token no banco mudou
+    if (!usuario || usuario.refreshToken !== tokenDeRenovacao) {
+      return res.status(403).json({ erro: "Refresh token inválido ou revogado." });
     }
 
-    //geracao do hash na senha com argon2Id
+    // 3. Se tudo estiver OK, geramos um NOVO Access Token zerado de 15 minutos!
+    const novoPayload = { id: usuario.id, email: usuario.email };
+    const novoAccessToken = jwt.sign(novoPayload, ACCESS_SECRET, { expiresIn: '15m' });
 
-    const senhaHash = await argon2.hash(senha, {
-        type: argon2.argon2id, //garante o algoritmo hibrido correto
-        memoryCost: 2 ** 16, //64MB de memoria para processar PADRAO
-        timeCost: 3, //3 iteracoes
-    })
-
-    const novoUsuario = await prisma.usuario.create({
-        data:{
-            nome,
-            email,
-            senha: senhaHash
-        },
-        select: {id: true, nome: true, email: true}
-    })
-
-    return res.status(201).json(novoUsuario)
-} catch(error){
-    return res.status(400).json({erro: "Erro ao registrar novo usuario"})
-}
-})
-
-//rota para login
-app.post("/login", async (req, res) =>{
-    const {email, senha } = req.body;
-
-    if(!email || !senha){
-        return res.status(400).json({erro: "Email e senha sao obrigatorios"})
-    }
-
-    const usuario = await prisma.usuario.findUnique({where: {email}})
-    if (!usuario){
-        return res.status(401).json({ erro: "Email ou senha invalidos"})
-    }
-
-    //Verifica se a senha enviada confere com a que esta no DB
-
-    const senhaCorreta = await argon2.verify(usuario.senha, senha)
-
-    if(!senhaCorreta){
-        return res.status(401).json({error: "Email ou senha invalidos"})
-    }
-
-    const payload = {id: usuario.id, email: usuario.email};
-    const token = jwt.sign(payload, SECRET_KEY, {expiresIn: '10m'})
+    console.log(`✅ [API] Access Token renovado com sucesso via Refresh Token para o usuário ${usuario.nome}`);
 
     return res.json({
-        token, 
-        usuario: {id: usuario.id, nome: usuario.nome, email: usuario.email}
-    })
-})
+      accessToken: novoAccessToken
+    });
+
+  } catch (error) {
+    // Se o refresh token de 30 dias também expirar (raro, mas acontece)
+    return res.status(403).json({ erro: "Sessão totalmente expirada. Faça login novamente." });
+  }
+});
+
+
+
+//rota para login
+app.post('/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    
+    const usuario = await prisma.usuario.findUnique({ where: { email } });
+    if (!usuario) return res.status(401).json({ erro: "Credenciais inválidas." });
+
+    const senhaCorreta = await argon2.verify(usuario.senha, senha);
+    if (!senhaCorreta) return res.status(401).json({ erro: "Credenciais inválidas." });
+
+    // Dados que vão dentro dos tokens
+    const payload = { id: usuario.id, email: usuario.email };
+
+    // 1. Gera o Access Token (Curto: para os testes rápidos, coloque '1m' ou '15m')
+    const accessToken = jwt.sign(payload, ACCESS_SECRET, { expiresIn: '15m' });
+
+    // 2. Gera o Refresh Token (Longo: 30 dias)
+    const refreshToken = jwt.sign(payload, REFRESH_SECRET, { expiresIn: '30d' });
+
+    // 3. Salva o Refresh Token no banco de dados para validação futura
+    await prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { refreshToken: refreshToken }
+    });
+
+    // 4. Retorna AMBOS para o cliente
+    return res.json({
+      accessToken,
+      refreshToken,
+      usuario: { id: usuario.id, nome: usuario.nome }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ erro: "Erro no login" });
+  }
+});
 
 app.post("/api/refresh", verificarToken, async (req, res) => {
   try {
