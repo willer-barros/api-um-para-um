@@ -99,7 +99,7 @@ app.post("/api/refresh", verificarToken, async (req, res) => {
     }
 
     const payload = { id: usuario.id, email: usuario.email };
-    const novoToken = jwt.sign(payload, SECRET_KEY, { expiresIn: '10m' });
+    const novoToken = jwt.sign(payload, SECRET_KEY, { expiresIn: '30d' });
 
     console.log(`🔄 [API] Token renovado com sucesso para o ID: ${usuario.id}`);
 
