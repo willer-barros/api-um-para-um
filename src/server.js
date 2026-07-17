@@ -57,7 +57,7 @@ app.post("/usuarios", async (req, res) => {
 
 // 📥 2. Rota de Login (Gera os dois Tokens)
 app.post('/login', async (req, res) => {
-  try {
+//   try {
     const { email, senha } = req.body;
     
     const usuario = await prisma.usuario.findUnique({ where: { email } });
@@ -84,9 +84,9 @@ app.post('/login', async (req, res) => {
       usuario: { id: usuario.id, email: usuario.email }
     });
 
-  } catch (error) {
-    return res.status(500).json({ erro: "Erro no login" });
-  }
+//   } catch (error) {
+//     return res.status(500).json({ erro: "Erro no login" });
+//   }
 });
 
 // 🔄 3. Rota de Refresh (Padrão de Mercado para contornar expiração)
